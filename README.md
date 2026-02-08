@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SupportMind Learning Loop (Local Demo)
 
-## Getting Started
+This app demonstrates a self-learning support intelligence layer over the synthetic workbook `SupportMind__Final_Data.xlsx`.
 
-First, run the development server:
+It covers the problem statement end-to-end:
+- Knowledge gap detection with evidence
+- KB drafting from resolved cases + scripts
+- Governance (approve/reject) + provenance (lineage)
+- QA coaching using the provided rubric prompt + autozero/red flags
+- Deterministic retrieval evaluation using `Questions.Answer_Type` + `Target_ID`
+
+## Prereqs
+
+- Node 20+
+- `OPENAI_API_KEY` set in your shell
+
+Dataset:
+- The workbook is expected at `SupportMind__Final_Data.xlsx` in repo root.
+- You can override this with `DATASET_PATH=/absolute/path/to/SupportMind__Final_Data.xlsx`.
+
+## Run
 
 ```bash
+cd /Users/yashwanthreddy.paakaala/Desktop/airng/hacknation2
+
+export OPENAI_API_KEY=...
+
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
+- `http://localhost:3000/`
+- `http://localhost:3000/cases`
+- `http://localhost:3000/dashboard`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo Flow (recommended)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1) `Dashboard` → click `Run Hit@K Evaluation`
+2) `Cases` → open a Tier-3 ticket → click:
+   - `Run Gap Detection`
+   - `Generate KB Draft`
+   - `Run QA / Coaching`
+   - `Publish (Approve)`
+3) Return to `Dashboard` → see governance + lineage stats update (local artifacts)
 
-## Learn More
+## Ralph Loop Artifacts
 
-To learn more about Next.js, take a look at the following resources:
+This repo includes a Ralph-style PRD and 3 logged runs:
+- PRD: `.agents/tasks/prd-supportmind.json`
+- Runs: `.ralph/runs/run-1`, `.ralph/runs/run-2`, `.ralph/runs/run-3`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Local Artifacts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Generated during demo runs:
+- `.data/audit/events.jsonl`
+- `.data/kb_drafts/<Ticket_Number>.json`
+- `.data/kb_published/<Ticket_Number>.json`
+- `.data/lineage/kb_lineage.jsonl`
+- `.data/qa/<Ticket_Number>.json`
+- `.data/reports/retrieval_metrics.json`
 
-## Deploy on Vercel
+## Playwright
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Smoke tests:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run test:e2e
+```

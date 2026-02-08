@@ -1,0 +1,87 @@
+{
+  "project": "SupportMind Learning Loop",
+  "branchName": "main",
+  "description": "Self-learning support intelligence layer (local demo) using SupportMind__Final_Data.xlsx: knowledge gap detection, KB drafting with governance+lineage, QA coaching rubric JSON, compliance guardrails, and measurable retrieval evaluation.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Ingest workbook + dataset health endpoints",
+      "description": "As a builder, I need deterministic ingestion of the XLSX workbook so all downstream agents and evaluations are driven by the provided ground truth.",
+      "acceptanceCriteria": [
+        "Workbook loader filters blank rows using primary keys per tab",
+        "Expose /api/health returning sheet counts and join coverage",
+        "Expose /cases UI listing tickets",
+        "App runs locally via npm run dev"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Run 1: Implemented XLSX ingestion (src/lib/dataset.ts) with blank-row filtering, added /api/health, and built Cases UI at /cases. Verified with npm run lint + npm run build."
+    },
+    {
+      "id": "US-002",
+      "title": "Retrieval layer + deterministic hit@k evaluation",
+      "description": "As a judge, I need measurable proof of retrieval accuracy using Questions.Answer_Type + Target_ID ground truth.",
+      "acceptanceCriteria": [
+        "Build per-corpus retrieval (KB / SCRIPT / TICKET_RESOLUTION)",
+        "Run evaluation on Questions and compute hit@1/3/5 per Answer_Type",
+        "Expose /api/run/eval and show results in /dashboard"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Run 3: Implemented deterministic retrieval evaluation over Questions with hit@1/3/5 per Answer_Type via /api/run/eval and dashboard rendering. See src/lib/eval.ts, src/app/api/run/eval/route.ts, src/app/dashboard/page.tsx."
+    },
+    {
+      "id": "US-003",
+      "title": "Knowledge gap detection agent with evidence",
+      "description": "As Support Ops, I need the system to decide whether to draft new KB, patch, or take no action, with traceable evidence.",
+      "acceptanceCriteria": [
+        "POST /api/run/gap returns action + reason + suggested Answer_Type + citations",
+        "Evidence-only behavior (no invented facts)",
+        "Heuristic override: if Generated_KB_Article_ID exists, default to no_action"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Run 2: Implemented gap detection agent + evidence (BM25 retrieval + OpenAI decision) via POST /api/run/gap. See src/lib/agents/gapDetector.ts and src/app/api/run/gap/route.ts."
+    },
+    {
+      "id": "US-004",
+      "title": "KB drafting + required inputs + provenance bundle",
+      "description": "As a knowledge manager, I need KB drafts generated from resolved cases and scripts with required placeholders and explicit lineage.",
+      "acceptanceCriteria": [
+        "POST /api/run/kb-draft generates KB draft JSON + guardrails",
+        "Draft includes Required Inputs mapped via Placeholder_Dictionary",
+        "Draft emits KB_Lineage-compatible rows (Ticket, Conversation, Script)",
+        "Draft saved under .data/kb_drafts/"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Run 2: Implemented KB draft generator using OpenAI + required placeholders via Placeholder_Dictionary + lineage bundle (Ticket/Conversation/Script) saved under .data/kb_drafts/. See src/lib/agents/kbDraft.ts and src/app/api/run/kb-draft/route.ts."
+    },
+    {
+      "id": "US-005",
+      "title": "Governance workflow + publish/reject with audit",
+      "description": "As an enterprise, I need a review step and an immutable audit trail before knowledge is published.",
+      "acceptanceCriteria": [
+        "POST /api/run/publish records reviewer decision to .data/governance/decisions.jsonl",
+        "Approved publishes KB artifact under .data/kb_published/ and writes lineage jsonl",
+        "All steps append to .data/audit/events.jsonl"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Run 2: Implemented governance publish/reject logging and lineage emission via POST /api/run/publish, writing to .data/governance/decisions.jsonl and .data/lineage/kb_lineage.jsonl. See src/app/api/run/publish/route.ts and src/lib/storage.ts."
+    },
+    {
+      "id": "US-006",
+      "title": "QA coaching rubric JSON + compliance guardrails",
+      "description": "As QA/compliance, I need consistent rubric-scored JSON, autozero/red flags, and guardrails that block unsafe KB publishing.",
+      "acceptanceCriteria": [
+        "POST /api/run/qa runs QA_Evaluation_Prompt and returns JSON",
+        "Guardrails run on KB draft content using moderation + simple sensitive-data checks",
+        "UI displays QA JSON and guardrail results"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Run 3: Implemented QA coaching agent running QA_Evaluation_Prompt to produce rubric JSON via /api/run/qa, plus moderation-based guardrails for KB drafts. UI displays QA JSON and guardrail outcomes. See src/lib/agents/qaEval.ts and src/app/api/run/qa/route.ts."
+    }
+  ]
+}
