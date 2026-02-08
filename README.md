@@ -1,58 +1,99 @@
-# SupportMind Learning Loop (Local Demo)
+# SupportMind for RealPage (Challenge 5)
 
-This app demonstrates a self-learning support intelligence layer over the synthetic workbook `SupportMind__Final_Data.xlsx`.
+> Hack Nation Hackathon Submission
 
-It covers the problem statement end-to-end:
-- Knowledge gap detection with evidence
-- KB drafting from resolved cases + scripts
-- Governance (approve/reject) + provenance (lineage)
-- QA coaching using the provided rubric prompt + autozero/red flags
-- Deterministic retrieval evaluation using `Questions.Answer_Type` + `Target_ID`
+SupportMind is a support-intelligence workspace built for the RealPage challenge. It turns historical support data into a practical learning loop for operations teams: detect gaps, draft knowledge, evaluate quality, and track governance over time.
 
-## Prereqs
+## Team
 
-- Node 20+
-- `OPENAI_API_KEY` set in your shell
+This project is co-maintained with equal ownership of ongoing development and decisions.
 
-Dataset:
-- The workbook is expected at `SupportMind__Final_Data.xlsx` in repo root.
-- You can override this with `DATASET_PATH=/absolute/path/to/SupportMind__Final_Data.xlsx`.
+- **Kris Kimmerle** (Maintainer) - [github.com/kriskimmerle](https://github.com/kriskimmerle)
+- **YashwanthReddy Paakaala** (Maintainer) - [github.com/kebo08](https://github.com/kebo08)
 
-## Run
+## Challenge Context
+
+- Event: Hack Nation
+- Track: RealPage
+- Challenge: Challenge 5
+
+## What It Does
+
+- Detects knowledge gaps using ticket and conversation evidence
+- Drafts KB articles from resolved cases and script context
+- Applies governance flow for approve/reject with lineage tracking
+- Evaluates support quality using rubric-based QA scoring
+- Runs deterministic retrieval evaluation using target IDs and answer types
+
+## Tech Stack
+
+- Next.js 16 + React 19 + TypeScript
+- OpenAI API (`openai` SDK)
+- XLSX ingestion from workbook source data
+- Playwright for smoke/e2e tests
+- Tailwind + shadcn/ui components
+
+## Repository Layout
+
+- `src/app` - UI pages and API routes
+- `src/lib` - data loading, agents, evaluation, and reporting logic
+- `tests` - Playwright smoke tests
+- `.data` - local generated artifacts (ignored by git)
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 20+
+- npm
+- `OPENAI_API_KEY` in your shell (required for AI-powered flows)
+
+### Dataset
+
+By default, the app reads:
+
+- `SupportMind__Final_Data.xlsx` from the repository root
+
+You can override this path if needed:
 
 ```bash
-cd /Users/yashwanthreddy.paakaala/Desktop/airng/hacknation2
+export DATASET_PATH="/absolute/path/to/SupportMind__Final_Data.xlsx"
+```
 
-export OPENAI_API_KEY=...
+### Run Locally
 
-npm install
+```bash
+npm ci
+export OPENAI_API_KEY="<your_key_here>"
 npm run dev
 ```
 
 Open:
-- `http://localhost:3000/`
-- `http://localhost:3000/cases`
-- `http://localhost:3000/dashboard`
 
-## Demo Flow (recommended)
+- [http://localhost:3000](http://localhost:3000)
+- [http://localhost:3000/cases](http://localhost:3000/cases)
+- [http://localhost:3000/dashboard](http://localhost:3000/dashboard)
 
-1) `Dashboard` → click `Run Hit@K Evaluation`
-2) `Cases` → open a Tier-3 ticket → click:
-   - `Run Gap Detection`
+## Test
+
+```bash
+npm run test:e2e
+```
+
+## Demo Flow
+
+1. Open `Dashboard` and run `Hit@K Evaluation`
+2. Open a case and run:
+   - `Gap Detection`
    - `Generate KB Draft`
    - `Run QA / Coaching`
    - `Publish (Approve)`
-3) Return to `Dashboard` → see governance + lineage stats update (local artifacts)
+3. Return to `Dashboard` to review updated governance and lineage metrics
 
-## Ralph Loop Artifacts
-
-This repo includes a Ralph-style PRD and 3 logged runs:
-- PRD: `.agents/tasks/prd-supportmind.json`
-- Runs: `.ralph/runs/run-1`, `.ralph/runs/run-2`, `.ralph/runs/run-3`
-
-## Local Artifacts
+## Local Output Artifacts
 
 Generated during demo runs:
+
 - `.data/audit/events.jsonl`
 - `.data/kb_drafts/<Ticket_Number>.json`
 - `.data/kb_published/<Ticket_Number>.json`
@@ -60,10 +101,6 @@ Generated during demo runs:
 - `.data/qa/<Ticket_Number>.json`
 - `.data/reports/retrieval_metrics.json`
 
-## Playwright
+## Maintainer Attribution
 
-Smoke tests:
-
-```bash
-npm run test:e2e
-```
+Both maintainers are active stewards of this project. If you are reviewing this repository for hackathon judging, please credit **Kris Kimmerle** and **YashwanthReddy Paakaala** as co-maintainers.
