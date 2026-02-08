@@ -18,7 +18,7 @@ export default defineConfig({
     env: {
       DATASET_PATH:
         process.env.DATASET_PATH ||
-        "/Users/yashwanthreddy.paakaala/Downloads/SupportMind__Final_Data.xlsx",
+        ".data/SupportMind__Final_Data.xlsx",
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
       NEXT_TELEMETRY_DISABLED: "1",
     },
