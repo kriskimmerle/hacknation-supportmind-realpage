@@ -13,6 +13,7 @@ export type AuditEvent = {
     | "llm_call"
     | "case_aggregate"
     | "seed"
+    | "demo_seed"
     | "gap_detect"
     | "kb_draft"
     | "kb_publish"
