@@ -33,6 +33,20 @@ This project is co-maintained with equal ownership of ongoing development and de
 - Playwright for smoke/e2e tests
 - Tailwind + shadcn/ui components
 
+## How We Built It (Ralph Wiggum Method)
+
+We built this project using a Ralph Wiggum-style iterative loop (fresh context each run, filesystem plus tests as state).
+
+1. Planned architecture and feature approach with **Claude Opus 4.6**.
+2. Used Opus 4.6 to generate a robust **JSON PRD**, a required input for the Ralph method.
+3. Configured the Ralph engine (internally referred to as `ralpha`) to run **GPT-5.3 Codex** in high-thinking mode for implementation iterations.
+4. Ran approximately **15 Ralph iterations**, with each run taking about **25-45 minutes**.
+5. Each run produced automated tests; we fixed issues between runs, with fewer defects over time.
+6. Performed user testing, identified new feature opportunities, and fed those requirements back into the next loop.
+7. Repeated this cycle until we reached the final product in this repository.
+
+This workflow emphasized rapid iteration, evidence-driven fixes, and steady convergence through repeated test-and-improve cycles.
+
 ## Repository Layout
 
 - `src/app` - UI pages and API routes
