@@ -114,7 +114,3 @@ Generated during demo runs:
 - `.data/lineage/kb_lineage.jsonl`
 - `.data/qa/<Ticket_Number>.json`
 - `.data/reports/retrieval_metrics.json`
-
-## Maintainer Attribution
-
-Both maintainers are active stewards of this project. If you are reviewing this repository for hackathon judging, please credit **Kris Kimmerle** and **YashwanthReddy Paakaala** as co-maintainers.
