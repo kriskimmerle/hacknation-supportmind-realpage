@@ -2,11 +2,10 @@ import { z } from "zod";
 
 import { getOpenAI } from "@/lib/openai";
 import { loadWorkbook } from "@/lib/dataset";
-import { newId } from "@/lib/storage";
 import type { EvidenceCitation, KBDraft } from "@/lib/agents/types";
 import { traceLLMCall, writeTraceArtifact } from "@/lib/trace";
 
-const DraftSchema = z.object({
+const PatchSchema = z.object({
   title: z.string().min(6),
   bodyMarkdown: z.string().min(40),
   tags: z.array(z.string()).default([]),
@@ -21,14 +20,16 @@ const DraftSchema = z.object({
       })
     )
     .default([]),
-  references: z
-    .array(z.object({ type: z.enum(["SCRIPT", "KB", "TICKET"]), id: z.string() }))
-    .default([]),
+  references: z.array(z.object({ type: z.enum(["SCRIPT", "KB", "TICKET"]), id: z.string() })).default([]),
+  changeLog: z.array(z.string()).default([]),
   modelNotes: z.string().default(""),
 });
 
-export async function draftKnowledgeArticle(params: {
+export async function patchKnowledgeArticle(params: {
   ticketNumber: string;
+  kbArticleId: string;
+  existingTitle?: string;
+  existingBody?: string;
   subject?: string;
   description?: string;
   resolution?: string;
@@ -36,8 +37,7 @@ export async function draftKnowledgeArticle(params: {
   scriptId?: string;
   scriptText?: string;
   evidence: EvidenceCitation[];
-  kbArticleIdProposed?: string;
-}): Promise<KBDraft> {
+}): Promise<{ draft: KBDraft; changeLog: string[] }> {
   const wb = loadWorkbook();
   const placeholders = wb.sheets["Placeholder_Dictionary"] || [];
   const placeholderMap = new Map(
@@ -50,21 +50,20 @@ export async function draftKnowledgeArticle(params: {
       .filter(Boolean) as Array<readonly [string, { meaning: string; example: string }]>
   );
 
-  const kbId = params.kbArticleIdProposed || `KB-DRAFT-${newId("kb")}`;
   const client = getOpenAI();
+  const prompt = `You are a governed Tier-3 KB editor.
 
-  const prompt = `You are a Tier-3 knowledge authoring agent building a governed knowledge base.
-
-Write a KB article DRAFT from the provided case and evidence.
+Patch (update) an EXISTING KB article using ONLY the provided evidence.
 
 Constraints:
 - Evidence-only. Do not invent IDs, commands, or confirmations.
+- Keep KB_Article_ID unchanged.
+- Preserve working steps; improve clarity, fix incorrect parts, add missing verification/escalation guidance.
 - If a script is referenced, describe when to use it and list required placeholders as "Required Inputs".
 - Include: Symptoms, Cause (if evidenced), Resolution Steps, Verification Steps, Escalation Notes, and References.
-- Use concise operational language suitable for support.
-- Output must be JSON only.
+- Output JSON only.
 
-Return JSON with:
+Return JSON:
 {
   title: string,
   bodyMarkdown: string,
@@ -73,8 +72,16 @@ Return JSON with:
   category?: string,
   requiredInputs: [{placeholder, meaning?, example?}],
   references: [{type:"SCRIPT"|"KB"|"TICKET", id:string}],
+  changeLog: string[],
   modelNotes: string
 }
+
+KB_Article_ID: ${params.kbArticleId}
+EXISTING_TITLE:
+${params.existingTitle || ""}
+
+EXISTING_BODY:
+${(params.existingBody || "").slice(0, 5000)}
 
 Case:
 Ticket_Number: ${params.ticketNumber}
@@ -91,7 +98,7 @@ ${(params.scriptText || "").slice(0, 2200)}
 
 Evidence snippets:
 ${params.evidence
-  .slice(0, 8)
+  .slice(0, 10)
   .map((e) => `- [${e.sourceType}] ${e.sourceId}: ${e.snippet}`)
   .join("\n")}
 `;
@@ -102,16 +109,17 @@ ${params.evidence
 
   const outputText = resp.output_text;
   const json = safeJsonParse(outputText);
-  const parsed = DraftSchema.safeParse(json);
+  const parsed = PatchSchema.safeParse(json);
+
   const artifactPath = writeTraceArtifact({
     ticketNumber: params.ticketNumber,
-    scope: "kb_draft",
+    scope: "kb_patch",
     kind: "llm",
-    data: { model: "gpt-4.1-mini", prompt, outputText },
+    data: { model: "gpt-4.1-mini", prompt, outputText, kbArticleId: params.kbArticleId },
   });
   traceLLMCall({
     ticketNumber: params.ticketNumber,
-    stage: "kb_draft",
+    stage: "kb_patch",
     model: "gpt-4.1-mini",
     input: prompt,
     outputText,
@@ -119,10 +127,9 @@ ${params.evidence
     parseOk: parsed.success,
     artifactPath,
   });
+
   if (!parsed.success) {
-    throw new Error(
-      `KB draft JSON parse failed: ${parsed.error.message}. Raw: ${outputText.slice(0, 400)}`
-    );
+    throw new Error(`KB patch JSON parse failed: ${parsed.error.message}. Raw: ${outputText.slice(0, 400)}`);
   }
 
   const requiredInputs = parsed.data.requiredInputs.map((ri) => {
@@ -137,18 +144,24 @@ ${params.evidence
 
   const lineage: KBDraft["lineage"] = [
     {
-      kbArticleId: kbId,
+      kbArticleId: params.kbArticleId,
       sourceType: "Ticket",
       sourceId: params.ticketNumber,
       relationship: "CREATED_FROM",
-      evidenceSnippet: (params.subject || params.description || "Derived from ticket").slice(0, 180),
+      evidenceSnippet: (params.subject || params.description || "Patch informed by ticket").slice(0, 180),
+    },
+    {
+      kbArticleId: params.kbArticleId,
+      sourceType: "Ticket",
+      sourceId: params.ticketNumber,
+      relationship: "PATCHES",
+      evidenceSnippet: `Patched KB_Article_ID ${params.kbArticleId} using evidence from ticket ${params.ticketNumber}.`,
     },
   ];
 
   if (params.transcript) {
-    // Conversation_ID isn't passed here; caller can patch it later.
     lineage.push({
-      kbArticleId: kbId,
+      kbArticleId: params.kbArticleId,
       sourceType: "Conversation",
       sourceId: "",
       relationship: "CREATED_FROM",
@@ -157,16 +170,16 @@ ${params.evidence
   }
   if (params.scriptId) {
     lineage.push({
-      kbArticleId: kbId,
+      kbArticleId: params.kbArticleId,
       sourceType: "Script",
       sourceId: params.scriptId,
       relationship: "REFERENCES",
-      evidenceSnippet: `KB references Script_ID ${params.scriptId} for backend fix procedure.`,
+      evidenceSnippet: `KB patch references Script_ID ${params.scriptId} for backend procedure.`,
     });
   }
 
-  return {
-    kbDraftId: kbId,
+  const draft: KBDraft = {
+    kbDraftId: params.kbArticleId,
     title: parsed.data.title,
     bodyMarkdown: parsed.data.bodyMarkdown,
     tags: parsed.data.tags,
@@ -177,6 +190,8 @@ ${params.evidence
     lineage,
     modelNotes: parsed.data.modelNotes,
   };
+
+  return { draft, changeLog: parsed.data.changeLog };
 }
 
 function safeJsonParse(s: string): unknown {

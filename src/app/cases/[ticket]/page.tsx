@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { getCaseByTicketNumber } from "@/lib/dataset";
+import { getCaseByTicketNumber, loadWorkbook } from "@/lib/dataset";
 import { CaseRunner } from "@/components/app/case-runner";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +21,24 @@ export default async function CasePage(props: { params: Promise<{ ticket: string
     );
   }
 
+  const wb = loadWorkbook();
+  const scripts = wb.sheets["Scripts_Master"] || [];
+  const scriptRow = t.Script_ID
+    ? scripts.find((r) => (r.Script_ID || "").trim() === (t.Script_ID || "").trim())
+    : null;
+
+  const scriptMeta = scriptRow
+    ? {
+        Script_ID: scriptRow.Script_ID || "",
+        Script_Title: scriptRow.Script_Title || "",
+        Script_Inputs: scriptRow.Script_Inputs || "",
+        Script_Purpose: scriptRow.Script_Purpose || "",
+      }
+    : null;
+
   return (
     <div className="min-w-0">
-      <CaseRunner ticket={t} conversation={conversation} />
+      <CaseRunner ticket={t} conversation={conversation} script={scriptMeta} />
     </div>
   );
 }

@@ -19,7 +19,19 @@ export async function POST(req: Request) {
     ticketFields,
   });
 
-  writeJson(projectDataPath("qa", `${ticketNumber}.json`), qa);
-  audit({ type: "qa_eval", ticketNumber, payload: { saved: true } });
+  const qaPath = projectDataPath("qa", `${ticketNumber}.json`);
+  writeJson(qaPath, qa);
+
+  const overall = String((qa as any)?.Overall_Weighted_Score || "");
+  const red = (qa as any)?.Red_Flags && typeof (qa as any).Red_Flags === "object" ? (qa as any).Red_Flags : {};
+  const redYes = Object.values(red).filter((v: any) => String(v?.score || "").toLowerCase() === "yes").length;
+
+  audit({
+    type: "qa_eval",
+    ticketNumber,
+    ok: true,
+    summary: overall ? `QA scored ${overall} (red flags: ${redYes})` : `QA completed (red flags: ${redYes})`,
+    payload: { saved: true, qaPath, overallWeightedScore: overall, redFlagsYes: redYes },
+  });
   return NextResponse.json({ qa });
 }

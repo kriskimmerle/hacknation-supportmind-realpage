@@ -27,7 +27,7 @@ export type KBDraft = {
     kbArticleId: string;
     sourceType: "Ticket" | "Conversation" | "Script";
     sourceId: string;
-    relationship: "CREATED_FROM" | "REFERENCES";
+    relationship: "CREATED_FROM" | "REFERENCES" | "PATCHES";
     evidenceSnippet: string;
   }>;
   modelNotes: string;

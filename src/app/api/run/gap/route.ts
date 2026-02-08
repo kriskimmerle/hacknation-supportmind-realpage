@@ -24,6 +24,12 @@ export async function POST(req: Request) {
     generatedKbId: ticket.Generated_KB_Article_ID,
   });
 
-  audit({ type: "gap_detect", ticketNumber, payload: result });
+  audit({
+    type: "gap_detect",
+    ticketNumber,
+    ok: true,
+    summary: `${result.action}: ${String(result.reason || "").slice(0, 180)}`,
+    payload: result,
+  });
   return NextResponse.json(result);
 }

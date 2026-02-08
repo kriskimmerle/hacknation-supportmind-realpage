@@ -154,7 +154,7 @@ export function getCorpora(): Record<CorpusType, Corpus> {
   if (g.__corpora && g.__corporaSig === sig) return g.__corpora;
 
   const wb = loadWorkbook();
-  const kbDocs = [...buildKbDocs(wb.sheets["Knowledge_Articles"] || []), ...loadLocalPublishedKbDocs()];
+  const kbDocs = mergeDocsById(buildKbDocs(wb.sheets["Knowledge_Articles"] || []), loadLocalPublishedKbDocs());
   const scriptDocs = buildScriptDocs(wb.sheets["Scripts_Master"] || []);
   const ticketDocs = [...buildSimTicketDocs(), ...buildTicketDocs(wb.sheets["Tickets"] || [])];
 
@@ -167,6 +167,13 @@ export function getCorpora(): Record<CorpusType, Corpus> {
   g.__corpora = corpora;
   g.__corporaSig = sig;
   return corpora;
+}
+
+function mergeDocsById(primary: Doc[], overrides: Doc[]): Doc[] {
+  const m = new Map<string, Doc>();
+  for (const d of primary) m.set(d.id, d);
+  for (const d of overrides) m.set(d.id, d);
+  return Array.from(m.values());
 }
 
 function loadLocalPublishedKbDocs(): Doc[] {

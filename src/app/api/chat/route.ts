@@ -114,7 +114,20 @@ ${evidence.map((e) => `- [${e.sourceType}] ${e.sourceId}: ${e.snippet}`).join("\
   });
 
   const answer = resp.output_text.trim();
-  audit({ type: "retrieve", payload: { mode: "chat", message, evidence } });
+  audit({
+    type: "retrieve",
+    ticketNumber: ticketNumber || undefined,
+    ok: true,
+    summary: ticketNumber ? `Chat retrieve for ${ticketNumber}` : "Chat retrieve",
+    payload: {
+      mode: "chat",
+      message,
+      ticketNumber,
+      evidence,
+      model: "gpt-4.1-mini",
+      evidenceCount: evidence.length,
+    },
+  });
 
   return NextResponse.json({
     answer,

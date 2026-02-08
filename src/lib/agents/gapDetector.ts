@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getOpenAI } from "@/lib/openai";
 import { retrieveEvidence } from "@/lib/agents/retrieve";
 import type { GapDecision } from "@/lib/agents/types";
+import { traceLLMCall, writeTraceArtifact } from "@/lib/trace";
+import { loadWorkbook } from "@/lib/dataset";
 
 const GapSchema = z.object({
   gapDetected: z.boolean(),
@@ -37,6 +39,27 @@ export async function detectGap(params: {
 
   const evidence = [...kbEvidence.slice(0, 3), ...scriptEvidence.slice(0, 2), ...ticketEvidence.slice(0, 2)];
 
+  // If the ticket links a Script_ID, include it as direct evidence for consistency.
+  const scriptId = (params.scriptId || "").trim();
+  if (scriptId) {
+    try {
+      const wb = loadWorkbook();
+      const scripts = wb.sheets["Scripts_Master"] || [];
+      const row = scripts.find((r) => (r.Script_ID || "").trim() === scriptId) || null;
+      if (row) {
+        evidence.unshift({
+          sourceType: "SCRIPT",
+          sourceId: scriptId,
+          score: 999,
+          snippet: (row.Script_Purpose || row.Script_Text_Sanitized || "").slice(0, 220),
+          title: (row.Script_Title || "").trim(),
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   // Heuristic guardrail: if already has a generated KB, typically no action.
   const heuristicNoAction = Boolean(params.generatedKbId && params.generatedKbId.startsWith("KB-SYN-"));
 
@@ -68,14 +91,29 @@ ${evidence
   .join("\n")}
 `;
 
-  const resp = await client.responses.create({
-    model: "gpt-4.1-mini",
-    input: prompt,
-  });
+  const started = Date.now();
+  const resp = await client.responses.create({ model: "gpt-4.1-mini", input: prompt });
+  const durationMs = Date.now() - started;
 
   const text = resp.output_text;
   const json = safeJsonParse(text);
   const parsed = GapSchema.safeParse(json);
+  const artifactPath = writeTraceArtifact({
+    ticketNumber: params.ticketNumber,
+    scope: "gap_detect",
+    kind: "llm",
+    data: { model: "gpt-4.1-mini", prompt, outputText: text },
+  });
+  traceLLMCall({
+    ticketNumber: params.ticketNumber,
+    stage: "gap_detect",
+    model: "gpt-4.1-mini",
+    input: prompt,
+    outputText: text,
+    durationMs,
+    parseOk: parsed.success,
+    artifactPath,
+  });
   const base: GapCore = parsed.success
     ? parsed.data
     : {

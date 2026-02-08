@@ -34,15 +34,34 @@ export async function POST(req: Request) {
 
   appendJsonl(projectDataPath("governance", "decisions.jsonl"), record);
 
+  let publishedPath = "";
+  let lineageEdges = 0;
+
   if (body.decision === "approved") {
-    writeJson(projectDataPath("kb_published", `${body.ticketNumber}.json`), record);
+    publishedPath = projectDataPath("kb_published", `${body.ticketNumber}.json`);
+    writeJson(publishedPath, record);
     // also emit lineage rows
     const lineage = (draftPayload.draft?.lineage || []) as Array<Record<string, unknown>>;
+    lineageEdges = lineage.length;
     for (const row of lineage) {
       appendJsonl(projectDataPath("lineage", "kb_lineage.jsonl"), row);
     }
   }
 
-  audit({ type: "kb_publish", ticketNumber: body.ticketNumber, payload: { decision: body.decision } });
+  audit({
+    type: "kb_publish",
+    ticketNumber: body.ticketNumber,
+    ok: true,
+    summary: body.decision === "approved" ? `Published KB (lineage edges: ${lineageEdges})` : `Governance: ${body.decision}`,
+    payload: {
+      decision: body.decision,
+      reviewerRole: body.reviewerRole || "",
+      source: body.source || "manual",
+      draftId: String(draftPayload?.draft?.kbDraftId || ""),
+      lineageEdges,
+      publishedPath,
+      governanceLogPath: projectDataPath("governance", "decisions.jsonl"),
+    },
+  });
   return NextResponse.json({ ok: true, record });
 }

@@ -6,6 +6,7 @@ import { getCaseByTicketNumber, loadWorkbook } from "@/lib/dataset";
 import { detectGap } from "@/lib/agents/gapDetector";
 import { retrieveEvidence } from "@/lib/agents/retrieve";
 import { draftKnowledgeArticle } from "@/lib/agents/kbDraft";
+import { patchKnowledgeArticle } from "@/lib/agents/kbPatch";
 import { runGuardrails } from "@/lib/agents/guardrails";
 import { runQaEvaluation } from "@/lib/agents/qaEval";
 import { logAutopilotEvent } from "@/lib/autopilot";
@@ -73,17 +74,63 @@ export async function POST(req: Request) {
       ? scripts.find((r) => (r.Script_ID || "").trim() === (ticket.Script_ID || "").trim())
       : null;
 
-    const draft = await draftKnowledgeArticle({
-      ticketNumber,
-      subject: ticket.Subject,
-      description: ticket.Description,
-      resolution: ticket.Resolution,
-      transcript: conversation?.Transcript,
-      scriptId: ticket.Script_ID,
-      scriptText: scriptRow?.Script_Text_Sanitized,
-      evidence,
-      kbArticleIdProposed: ticket.Generated_KB_Article_ID || undefined,
-    });
+    // Add direct script evidence when ticket links a script.
+    if (ticket.Script_ID && scriptRow) {
+      evidence.unshift({
+        sourceType: "SCRIPT",
+        sourceId: (ticket.Script_ID || "").trim(),
+        score: 999,
+        snippet: (scriptRow.Script_Purpose || scriptRow.Script_Text_Sanitized || "").slice(0, 220),
+        title: (scriptRow.Script_Title || "").trim(),
+      });
+    }
+
+    let draft;
+    let patchMeta: Record<string, unknown> | null = null;
+    if (gap.action === "patch_existing_kb") {
+      const baseKbId = (ticket.KB_Article_ID || "").trim();
+      const kbRows = wb.sheets["Knowledge_Articles"] || [];
+      const kbRow = baseKbId ? kbRows.find((r) => (r.KB_Article_ID || "").trim() === baseKbId) || null : null;
+      if (!baseKbId || !kbRow) {
+        logAutopilotEvent({
+          id,
+          ticketNumber,
+          stage: "needs_review",
+          ok: false,
+          summary: "Patch requested but KB_Article_ID missing/unresolvable; routed to human review",
+          artifactPaths: { ...artifacts },
+        });
+        return NextResponse.json({ ok: true, id, gap, published: false, reason: "missing_base_kb" });
+      }
+
+      const patched = await patchKnowledgeArticle({
+        ticketNumber,
+        kbArticleId: baseKbId,
+        existingTitle: (kbRow.Title || "").trim(),
+        existingBody: (kbRow.Body || "").trim(),
+        subject: ticket.Subject,
+        description: ticket.Description,
+        resolution: ticket.Resolution,
+        transcript: conversation?.Transcript,
+        scriptId: ticket.Script_ID,
+        scriptText: scriptRow?.Script_Text_Sanitized,
+        evidence,
+      });
+      draft = patched.draft;
+      patchMeta = { baseKbId, changeLog: patched.changeLog };
+    } else {
+      draft = await draftKnowledgeArticle({
+        ticketNumber,
+        subject: ticket.Subject,
+        description: ticket.Description,
+        resolution: ticket.Resolution,
+        transcript: conversation?.Transcript,
+        scriptId: ticket.Script_ID,
+        scriptText: scriptRow?.Script_Text_Sanitized,
+        evidence,
+        kbArticleIdProposed: ticket.Generated_KB_Article_ID || undefined,
+      });
+    }
     if (conversation?.Conversation_ID) {
       for (const l of draft.lineage) {
         if (l.sourceType === "Conversation" && !l.sourceId) l.sourceId = conversation.Conversation_ID;
@@ -92,11 +139,11 @@ export async function POST(req: Request) {
 
     const guard = await runGuardrails({
       content: `${draft.title}\n\n${draft.bodyMarkdown}`,
-      context: { ticketNumber, kbDraftId: draft.kbDraftId },
+      context: { ticketNumber, kbDraftId: draft.kbDraftId, scriptId: ticket.Script_ID || "" },
     });
 
     const draftPath = projectDataPath("autopilot", "runs", id, "kb_draft.json");
-    writeJson(draftPath, { draft, guardrails: guard });
+    writeJson(draftPath, { draft, guardrails: guard, evidence, patch: patchMeta, mode: gap.action === "patch_existing_kb" ? "patch" : "new" });
     artifacts.kbDraft = draftPath;
     logAutopilotEvent({
       id,
@@ -160,6 +207,13 @@ export async function POST(req: Request) {
     const qaPath = projectDataPath("autopilot", "runs", id, "qa.json");
     writeJson(qaPath, qa);
     artifacts.qa = qaPath;
+
+    // Also write the canonical QA artifact so KPIs include autopilot QA runs.
+    try {
+      writeJson(projectDataPath("qa", `${ticketNumber}.json`), qa);
+    } catch {
+      // ignore
+    }
     logAutopilotEvent({
       id,
       ticketNumber,
@@ -179,6 +233,20 @@ export async function POST(req: Request) {
         artifactPaths: { ...artifacts },
       });
       return NextResponse.json({ ok: true, id, gap, draft, guardrails: guard, qa, published: false });
+    }
+
+    // QA must gate autopublish (trust interface): block on red flags or low score.
+    const qaGate = qaAllowsPublish(qa);
+    if (!qaGate.ok) {
+      logAutopilotEvent({
+        id,
+        ticketNumber,
+        stage: "needs_review",
+        ok: false,
+        summary: `Blocked by QA gate: ${qaGate.reason}`,
+        artifactPaths: { ...artifacts },
+      });
+      return NextResponse.json({ ok: true, id, gap, draft, guardrails: guard, qa, published: false, qaGate });
     }
 
     logAutopilotEvent({
@@ -245,6 +313,23 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
+}
+
+function qaAllowsPublish(qa: unknown): { ok: boolean; reason: string; overall: number | null; redFlagsYes: number } {
+  const obj = qa && typeof qa === "object" ? (qa as any) : null;
+  const overallRaw = typeof obj?.Overall_Weighted_Score === "string" ? obj.Overall_Weighted_Score : "";
+  const m = overallRaw.match(/(\d+(?:\.\d+)?)%/);
+  const overall = m ? Number(m[1]) : null;
+
+  const red = obj?.Red_Flags && typeof obj.Red_Flags === "object" ? obj.Red_Flags : {};
+  const redFlagsYes = Object.values(red).filter((v: any) => String(v?.score || "").toLowerCase() === "yes").length;
+  if (redFlagsYes > 0) return { ok: false, reason: `red flags triggered (${redFlagsYes})`, overall, redFlagsYes };
+
+  const threshold = 80;
+  if (overall === null) return { ok: false, reason: "missing Overall_Weighted_Score", overall, redFlagsYes };
+  if (overall < threshold) return { ok: false, reason: `score below threshold (${overall}% < ${threshold}%)`, overall, redFlagsYes };
+
+  return { ok: true, reason: "ok", overall, redFlagsYes };
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {

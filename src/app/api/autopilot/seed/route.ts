@@ -9,7 +9,8 @@ import {
   type SimTicket,
 } from "@/lib/sim";
 import { logAutopilotEvent } from "@/lib/autopilot";
-import { projectDataPath, writeJson } from "@/lib/storage";
+import { projectDataPath, writeJson, audit } from "@/lib/storage";
+import { traceLLMCall, writeTraceArtifact } from "@/lib/trace";
 
 export const runtime = "nodejs";
 
@@ -53,7 +54,9 @@ JSON schema:
   }
 }`;
 
+  const started = Date.now();
   const resp = await client.responses.create({ model: "gpt-4.1-mini", input: prompt });
+  const durationMs = Date.now() - started;
   const json = safeJsonParse(resp.output_text);
   if (!json || typeof json !== "object") {
     return NextResponse.json({ error: "Seed agent did not return JSON" }, { status: 500 });
@@ -83,6 +86,40 @@ JSON schema:
 
   const artifactPath = projectDataPath("autopilot", "seed", `${ticketNumber}.json`);
   writeJson(artifactPath, { ticket: simTicket, conversation: simConversation, raw: resp.output_text });
+
+  const tracePath = writeTraceArtifact({
+    ticketNumber,
+    scope: "seed",
+    kind: "llm",
+    data: { model: "gpt-4.1-mini", prompt, outputText: resp.output_text, normalized: { ticket: simTicket, conversation: simConversation } },
+  });
+  traceLLMCall({
+    ticketNumber,
+    stage: "seed",
+    model: "gpt-4.1-mini",
+    input: prompt,
+    outputText: resp.output_text,
+    durationMs,
+    parseOk: true,
+    artifactPath: tracePath,
+  });
+  audit({
+    type: "seed",
+    ticketNumber,
+    ok: true,
+    summary: `Seeded sim case ${ticketNumber}`,
+    payload: {
+      ticketNumber,
+      conversationId,
+      artifacts: {
+        autopilotSeed: artifactPath,
+        trace: tracePath,
+        simTickets: projectDataPath("sim", "tickets.jsonl"),
+        simConversations: projectDataPath("sim", "conversations.jsonl"),
+      },
+      note: "Sim seed is an LLM-generated ticket+transcript used to mimic real-world incoming cases.",
+    },
+  });
 
   logAutopilotEvent({
     id: `seed-${ticketNumber}`,

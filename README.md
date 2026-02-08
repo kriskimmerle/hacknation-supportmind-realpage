@@ -1,116 +1,91 @@
-# SupportMind for RealPage (Challenge 5)
+# SupportMind - Self-Learning Support Intelligence (RealPage Track)
 
-> Hack Nation Hackathon Submission
+SupportMind is a local demo of a self-learning support intelligence layer over the synthetic workbook `SupportMind__Final_Data.xlsx`.
 
-SupportMind is a support-intelligence workspace built for the RealPage challenge. It turns historical support data into a practical learning loop for operations teams: detect gaps, draft knowledge, evaluate quality, and track governance over time.
+It focuses on trust primitives for support at scale:
+- Triage new cases and recommend KB vs Script vs prior resolution
+- Generate a governed KB draft (or patch an existing KB) from resolved cases + transcripts
+- Run compliance/safety guardrails before publish
+- Score interactions with the provided QA rubric (and use QA as a publish gate in Autopilot)
+- Preserve provenance/lineage + an audit/X-Ray view (“show your work”)
+- Evaluate retrieval accuracy deterministically using `Questions.Answer_Type` + `Target_ID`
 
-## Team
+## What You Can Demo
 
-This project is co-maintained with equal ownership of ongoing development and decisions.
+- `Cases` (human-in-the-loop): Gap → KB Draft/Patch → Guardrails → QA → Governance publish
+- `Autopilot` (automated): Seed a new simulated case → run the pipeline → publish or route to review
+- `X-Ray` (audit): data sources + joins, automation timeline, citations, guardrail artifacts, and LLM trace artifacts
+- `Dashboard`: hit@k retrieval metrics + learning loop KPIs
 
-- **Kris Kimmerle** (Maintainer) - [github.com/kriskimmerle](https://github.com/kriskimmerle)
-- **YashwanthReddy Paakaala** (Maintainer) - [github.com/kebo08](https://github.com/kebo08)
+## Dataset
 
-## Challenge Context
+Place the workbook at:
+- `.data/SupportMind__Final_Data.xlsx`
 
-- Event: Hack Nation
-- Track: RealPage
-- Challenge: Challenge 5
+Key joins used by the app:
+- `Ticket_Number`: Tickets ↔ Conversations
+- `Script_ID`: Tickets ↔ Scripts_Master
+- `KB_Article_ID`: Tickets ↔ Knowledge_Articles
 
-## What It Does
+Corpora used for retrieval:
+- `KB`: `Knowledge_Articles` + locally published KB artifacts
+- `SCRIPT`: `Scripts_Master`
+- `TICKET_RESOLUTION`: `Tickets` + locally seeded sim tickets
 
-- Detects knowledge gaps using ticket and conversation evidence
-- Drafts KB articles from resolved cases and script context
-- Applies governance flow for approve/reject with lineage tracking
-- Evaluates support quality using rubric-based QA scoring
-- Runs deterministic retrieval evaluation using target IDs and answer types
+## Run Locally
 
-## Tech Stack
-
-- Next.js 16 + React 19 + TypeScript
-- OpenAI API (`openai` SDK)
-- XLSX ingestion from workbook source data
-- Playwright for smoke/e2e tests
-- Tailwind + shadcn/ui components
-
-## How We Built It (Ralph Wiggum Method)
-
-We built this project using a Ralph Wiggum-style iterative loop (fresh context each run, filesystem plus tests as state).
-
-1. Planned architecture and feature approach with **Claude Opus 4.6**.
-2. Used Opus 4.6 to generate a robust **JSON PRD**, a required input for the Ralph method.
-3. Configured the Ralph engine (internally referred to as `ralpha`) to run **GPT-5.3 Codex** in high-thinking mode for implementation iterations.
-4. Ran approximately **15 Ralph iterations**, with each run taking about **25-45 minutes**.
-5. Each run produced automated tests; we fixed issues between runs, with fewer defects over time.
-6. Performed user testing, identified new feature opportunities, and fed those requirements back into the next loop.
-7. Repeated this cycle until we reached the final product in this repository.
-
-This workflow emphasized rapid iteration, evidence-driven fixes, and steady convergence through repeated test-and-improve cycles.
-
-## Repository Layout
-
-- `src/app` - UI pages and API routes
-- `src/lib` - data loading, agents, evaluation, and reporting logic
-- `tests` - Playwright smoke tests
-- `.data` - local generated artifacts (ignored by git)
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- npm
-- `OPENAI_API_KEY` in your shell (required for AI-powered flows)
-
-### Dataset
-
-By default, the app reads:
-
-- `SupportMind__Final_Data.xlsx` from the repository root
-
-You can override this path if needed:
+Prereqs:
+- Node 20+
+- `OPENAI_API_KEY` in your environment
 
 ```bash
-export DATASET_PATH="/absolute/path/to/SupportMind__Final_Data.xlsx"
-```
+npm install
 
-### Run Locally
+export OPENAI_API_KEY=...
 
-```bash
-npm ci
-export OPENAI_API_KEY="<your_key_here>"
+# default
 npm run dev
+
+# or run on a 9000-series port
+npm run dev -- --port 9000
 ```
 
 Open:
+- `http://localhost:9000/` (or `3000` if you didn’t set a port)
+- `http://localhost:9000/cases`
+- `http://localhost:9000/autopilot`
+- `http://localhost:9000/dashboard`
 
-- [http://localhost:3000](http://localhost:3000)
-- [http://localhost:3000/cases](http://localhost:3000/cases)
-- [http://localhost:3000/dashboard](http://localhost:3000/dashboard)
+## Recommended Demo Script
 
-## Test
+1) `Autopilot` → `Seed New Case (Agent)`
+2) Autopilot runs: gap_detect → kb_draft/kb_patch → guardrail → qa_eval → publish (or needs_review)
+3) Open the seeded case in `Cases` and click `X-Ray` to show:
+   - where the case data came from (seed artifact vs workbook)
+   - how case context was aggregated + truncated
+   - evidence/citations used for decisions
+   - guardrails output + moderation artifact path
+   - LLM trace artifacts (prompts/outputs) saved locally
+4) `Dashboard` → run `Hit@K` evaluation to show measurable retrieval accuracy
 
-```bash
-npm run test:e2e
-```
+## Local Artifacts (Generated)
 
-## Demo Flow
-
-1. Open `Dashboard` and run `Hit@K Evaluation`
-2. Open a case and run:
-   - `Gap Detection`
-   - `Generate KB Draft`
-   - `Run QA / Coaching`
-   - `Publish (Approve)`
-3. Return to `Dashboard` to review updated governance and lineage metrics
-
-## Local Output Artifacts
-
-Generated during demo runs:
-
-- `.data/audit/events.jsonl`
+All artifacts are local-only and ignored by git:
+- `.data/audit/events.jsonl` (audit timeline)
 - `.data/kb_drafts/<Ticket_Number>.json`
 - `.data/kb_published/<Ticket_Number>.json`
 - `.data/lineage/kb_lineage.jsonl`
 - `.data/qa/<Ticket_Number>.json`
 - `.data/reports/retrieval_metrics.json`
+- `.data/traces/<Ticket_Number>/**` (LLM prompts/outputs, moderation artifacts)
+
+## Tests
+
+```bash
+npm run test:e2e
+```
+
+## Notes
+
+- The provided dataset is synthetic; this repo does not include real customer PII.
+- This is a hackathon-grade PoC optimized for demo clarity, traceability, and measurable evaluation.
